@@ -1,0 +1,120 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# Load required packages
+library(caret)
+library(knitr)
+```
+
+
+```{r}
+# Set working directory
+setwd("~/WorkingDirectory")
+```
+
+
+```{r}
+# Import training and test data sets
+train <- read.csv("training_data.txt", sep="")
+
+test <- read.csv("test_data.txt", sep="")
+```
+
+
+```{r}
+# Create a crosswalk from activity number to activity labels and dynamic/static
+xwalk <- data.frame(activity = 1:12,
+                    dynamic = c(rep("dynamic", 3), rep("static", 9)))
+```
+
+
+```{r}
+# Format training data set
+
+## Add dynamic/static to training data set using crosswalk
+train$dynamic <- xwalk$dynamic[match(train$activity, xwalk$activity)]
+
+## Change dynamic/static to factors with 2-levels
+train$dynamic <- as.factor(train$dynamic)
+
+## Reorder columns of train so response variables for ease of viewing
+train <- train[, c(1,2,564,3:563)]
+
+## Create new data frame without subject or activity
+train <- train[, -2]
+```
+
+
+```{r}
+# Create custom summary function that returns accuracy, Kappa, AUC, sensitivity, and specificity
+customSummary <- function(data, lev = NULL, model = NULL){
+  default <- defaultSummary(data, lev = lev, model = model)
+  twoClass <- twoClassSummary(data, lev = lev, model = model)
+  return(c(default, twoClass))
+}
+```
+
+
+```{r}
+# Train and evaluate full logistic model
+
+## Set seed
+set.seed(1)
+
+## Setup 10-fold CV repeated 5 times
+ctrl <- trainControl(method = 'repeatedcv',
+                     number = 3,
+                     repeats = 5,
+                     classProbs = TRUE,
+                     summaryFunction = customSummary,
+                     index = replicate(5, groupKFold(train$subject, 3)))
+
+## Train and run repeated CV on a logistic model with dynamic/static response and all predictors
+log.model <- train(dynamic ~ . -subject,
+                   data = train,
+                   method = 'glm',
+                   family = binomial,
+                   maxit = 10000, # Increase maximum iterations to ensure convergence
+                   trControl = ctrl,
+                   tuneLength = 1,
+                   metric = "Accuracy")
+```
+
+
+```{r}
+performance <- data.frame("logistic model", log.model$results[2:6])
+
+kable(performance, col.names = c("", "Accuracy", "Kappa", "ROC", "Sensitivity", "Specificity"))
+```
+
+
+```{r}
+# Predict dynamic/static using logistic model
+predictions <- predict(log.model, newdata = test)
+```
+
+
+```{r}
+# Prep text file
+
+## Convert predictions to character strings
+predictions <- as.character(predictions)
+
+## Replace "static" with 0 and "dynamic" with 1
+predictions[predictions == "static"] <- 0
+predictions[predictions == "dynamic"] <- 1
+
+## Create text file for submission
+write.table(predictions,
+            file = "binary_1188.txt",
+            quote = FALSE,
+            row.names = FALSE,
+            col.names = FALSE)
+```
