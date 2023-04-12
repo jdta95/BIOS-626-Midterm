@@ -2,7 +2,7 @@
 
 ## Binary Code
 Before running the code, please follow these steps:
-1. Make sure you have the following packages installed: caret
+1. Make sure you have the following packages installed: caret, knitr
 2. Download the "training_data.txt" and "test_data.txt" data files
 3. Change the working directory in line 19 to the location of the data files
 
