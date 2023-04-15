@@ -63,7 +63,7 @@ customSummary <- function(data, lev = NULL, model = NULL){
 
 
 ```{r}
-# Train and evaluate full logistic model
+# Train and cross-validate full logistic model
 
 ## Set seed
 set.seed(1)
@@ -89,6 +89,7 @@ log.model <- train(dynamic ~ . -subject,
 
 
 ```{r}
+# Show CV evaluation statistics
 performance <- data.frame("logistic model", log.model$results[2:6])
 
 kable(performance, col.names = c("", "Accuracy", "Kappa", "ROC", "Sensitivity", "Specificity"))
