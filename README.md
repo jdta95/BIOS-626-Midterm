@@ -9,9 +9,9 @@ Before running the code in "Jonathan Ta Midterm Binary.Rmd", please follow these
 Once you have completed the steps, you can run "Jonathan Ta Midterm Binary.Rmd".
 It will load the training and test data, cross-validate and train a logistic model, run predictions on the test data using the model, and text file "binary_1188.txt" containing the predictions.
 
-* Note the following warnings may occur when training the model:
-** Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-** Warning: prediction from a rank-deficient fit may be misleadingWarning: prediction from a rank-deficient fit may be misleading
+Note the following warnings may occur when training the model:
+* Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+* Warning: prediction from a rank-deficient fit may be misleadingWarning: prediction from a rank-deficient fit may be misleading
 
 ## Multiclass Code
 Before running the code in "Jonathan Ta Midterm Multi.Rmd", please follow these steps:
