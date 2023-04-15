@@ -134,7 +134,7 @@ i <- 10
 ctrl <- trainControl(method = "repeatedcv",
                      number = 3,
                      repeats = i,
-                     index = replicate(i, groupKFold(train.D[, subject], 3)),
+                     index = replicate(i, groupKFold(train.D[, subject], 3)), ### samples subjects into 3 folds
                      summaryFunction = multiClassSummary,
                      savePredictions = "all",
                      classProbs = TRUE,
