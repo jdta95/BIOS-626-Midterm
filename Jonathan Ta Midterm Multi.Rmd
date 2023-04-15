@@ -29,7 +29,7 @@ registerDoParallel(cl)
 
 ```{r}
 # Set work directory to the location of your training and test data files
-setwd("~/wd")
+setwd("~/WorkingDirectory")
 ```
 
 
@@ -66,8 +66,7 @@ xwalk <- data.frame(
   )
 
 ## Add activity labels
-train[, activity.label := xwalk$activity.label[match(train$activity,
-                                                     xwalk$activity)]]
+train[, activity.label := xwalk$activity.label[match(train$activity, xwalk$activity)]]
 
 ## Reorder columns for easier viewing
 setcolorder(train, c(1,2,565,564,3:563))
@@ -311,18 +310,13 @@ WS <- c(max(ModelListS$svmLinear2$results$Accuracy),
 
 ```{r}
 # Compute weighted probability sums for each class
-test[, `:=` (p.walk = sum(c(p.walk.svm, p.walk.lda, p.walk.rf,
-                            p.walk.ada) * WD),
-             p.walkup = sum(c(p.walkup.svm, p.walkup.lda, p.walkup.rf,
-                              p.walkup.ada) * WD),
-             p.walkdown = sum(c(p.walkdown.svm, p.walkdown.lda, p.walkdown.rf,
-                                p.walkdown.ada) * WD),
+test[, `:=` (p.walk = sum(c(p.walk.svm, p.walk.lda, p.walk.rf, p.walk.ada) * WD),
+             p.walkup = sum(c(p.walkup.svm, p.walkup.lda, p.walkup.rf, p.walkup.ada) * WD),
+             p.walkdown = sum(c(p.walkdown.svm, p.walkdown.lda, p.walkdown.rf, p.walkdown.ada) * WD),
              p.sit = sum(c(p.sit.svm, p.sit.lda, p.sit.rf, p.sit.ada) * WS),
-             p.stand = sum(c(p.stand.svm, p.stand.lda, p.stand.rf,
-                             p.stand.ada) * WS),
+             p.stand = sum(c(p.stand.svm, p.stand.lda, p.stand.rf, p.stand.ada) * WS),
              p.lay = sum(c(p.lay.svm, p.lay.lda, p.lay.rf, p.lay.ada) * WS),
-             p.trans = sum(c(p.trans.svm, p.trans.lda, p.trans.rf,
-                             p.trans.ada) * WS)), 
+             p.trans = sum(c(p.trans.svm, p.trans.lda, p.trans.rf, p.trans.ada) * WS)), 
      by = 1:nrow(test)
      ]
 ```
