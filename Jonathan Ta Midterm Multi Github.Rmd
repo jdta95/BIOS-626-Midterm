@@ -1,0 +1,365 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# Load required packages
+library(data.table)
+library(caret)
+library(caretEnsemble)
+library(doParallel)
+library(adabag) #AdaBoost.M1
+library(MASS) #lda
+library(e1071) #svmLinear2
+library(randomForest) #rf
+```
+
+
+```{r}
+# Set up cluster for faster computing
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+```
+
+
+```{r}
+# Set work directory to the location of your training and test data files
+setwd("~/wd")
+```
+
+
+```{r}
+# Read in the training data
+train <- read.csv("training_data.txt", sep="")
+
+# Create a new training data file that is compatible with data.table package
+write.table(train, file = "training_data_copy.txt", row.names = FALSE)
+```
+
+
+```{r}
+# Training data processing
+
+## Read in training data as a data.table
+train <- fread("training_data_copy.txt")
+
+## Group all postural transitions together
+train[activity %in% 7:12, activity := 7]
+
+## Label dynamic vs static
+train[, binary := rep(0, nrow(train))]
+
+train[activity == 1 | activity == 2 | activity == 3, binary := 1]
+
+train[, binary := as.factor(binary)]
+
+## Create a crosswalk from activity number to activity labels
+xwalk <- data.frame(
+  activity = 1:7,
+  activity.label = c("walking", "walking.upstairs", "walking.downstairs",
+                     "sitting", "standing", "lying", "postural.transition")
+  )
+
+## Add activity labels
+train[, activity.label := xwalk$activity.label[match(train$activity,
+                                                     xwalk$activity)]]
+
+## Reorder columns for easier viewing
+setcolorder(train, c(1,2,565,564,3:563))
+```
+
+
+```{r}
+# Separate training data by dynamic/static status
+train.D <- train[binary == 1]
+train.S <- train[binary == 0]
+
+# Convert activity.label into factors
+train.D[, activity.label := as.factor(activity.label)]
+train.S[, activity.label := as.factor(activity.label)]
+
+# Delete unnecessary variables
+train.D[, c("activity", "binary") := NULL]
+train.S[, c("activity", "binary") := NULL]
+```
+
+
+```{r}
+# CV and training svmLinear2, lda, rf, and AdaBoost.M1 models for dynamic data
+
+## Set seed
+set.seed(1)
+
+## Set repetitions
+i <- 10
+
+## Set control settings
+ctrl <- trainControl(
+  method = "repeatedcv",
+  number = 3,
+  repeats = i,
+  index = replicate(i, groupKFold(train.D[, subject], 3)), ### Sample by subject
+  summaryFunction = multiClassSummary,
+  savePredictions = "all",
+  classProbs = TRUE,
+  search = "random",
+  allowParallel = TRUE
+  )
+
+## Train models with identical folds and select parameters by best mean accuracy
+ModelListD <- caretList(
+  x = train.D[, F1:F561],
+  y = train.D[, activity.label],
+  metric = "Accuracy",
+  methodList = c("svmLinear2", "lda", "rf", "AdaBoost.M1"),
+  trControl = ctrl
+  )
+```
+
+
+```{r}
+# CV and training svmLinear2, lda, rf, and AdaBoost.M1 models for static data
+
+## Set seed
+set.seed(1)
+
+## Set repetitions
+i <- 10
+
+## Set control settings
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 3,
+                     repeats = i,
+                     index = replicate(i, groupKFold(train.D[, subject], 3)),
+                     summaryFunction = multiClassSummary,
+                     savePredictions = "all",
+                     classProbs = TRUE,
+                     search = "random",
+                     allowParallel = TRUE)
+
+## Train models with identical folds and select parameters by best mean accuracy
+ModelListS <- caretList(
+  x = train.S[, F1:F561],
+  y = train.S[, activity.label],
+  metric = "Accuracy",
+  methodList = c("svmLinear2", "lda", "rf", "AdaBoost.M1"),
+  trControl = ctrl
+  )
+```
+
+
+```{r}
+# Prediction correlations between models
+
+## Dynamic
+modelCor(resamples(ModelListD))
+
+## Static
+modelCor(resamples(ModelListS))
+```
+
+
+```{r}
+# Performance statistics for each model
+
+## Dynamic SVM
+ModelListD$svmLinear2$results
+
+## Dynamic LDA
+ModelListD$lda$results
+
+## Dynamic random forest
+ModelListD$rf$results
+
+## Dynamic AdaBoost
+ModelListD$AdaBoost.M1$results
+
+## Static SVM
+ModelListS$svmLinear2$results
+
+## Static LDA
+ModelListS$lda$results
+
+## Static random forest
+ModelListS$rf$results
+
+## Static AdaBoost
+ModelListS$AdaBoost.M1$results
+```
+
+
+
+```{r}
+# Load test data
+test <- fread("test_data_copy.txt")
+
+# Add predictions from binary classifier to test data
+test <- cbind(test, fread("binary_1188.txt"))
+
+colnames(test)[563] <- "binary"
+
+test[, binary := as.factor(binary)]
+
+# Add empty prediction column to test data
+test[, prediction := as.numeric(rep(NA, nrow(test)))]
+
+# Set column order for easier viewing
+setcolorder(test, c(564,563,1:562))
+```
+
+
+```{r}
+# Calculate class probabilities for predicted dynamic observations
+
+## Dynamic SVM
+probDsvm <- as.data.table(predict(ModelListD$svmLinear2,
+                                  newdata = test[binary == 1],
+                                  type = "prob"))
+
+## Dynamic LDA
+probDlda <- as.data.table(predict(ModelListD$lda,
+                                  newdata = test[binary == 1],
+                                  type = "prob"))
+
+## Dynamic random forest
+probDrf <- as.data.table(predict(ModelListD$rf,
+                                 newdata = test[binary == 1],
+                                 type = "prob"))
+
+## Dynamic AdaBoost
+probDada <- as.data.table(predict(ModelListD$AdaBoost.M1,
+                                  newdata = test[binary == 1],
+                                  type = "prob"))
+
+## Static SVM
+probSsvm <- as.data.table(predict(ModelListS$svmLinear2,
+                                  newdata = test[binary == 0],
+                                  type = "prob"))
+
+## Static LDA
+probSlda <- as.data.table(predict(ModelListS$lda,
+                                  newdata = test[binary == 0],
+                                  type = "prob"))
+
+## Static random forest
+probSrf <- as.data.table(predict(ModelListS$rf,
+                                 newdata = test[binary == 0],
+                                 type = "prob"))
+
+## Static AdaBoost
+probSada <- as.data.table(predict(ModelListS$AdaBoost.M1,
+                                  newdata = test[binary == 0],
+                                  type = "prob"))
+```
+
+
+```{r}
+# Add predicted probabilities from all models to test data table
+test[binary == 1, `:=` (p.walk.svm = probDsvm[, walking],
+                        p.walk.lda = probDlda[, walking],
+                        p.walk.rf = probDrf[, walking],
+                        p.walk.ada = probDada[, walking],
+                        p.walkup.svm = probDsvm[, walking.upstairs],
+                        p.walkup.lda = probDlda[, walking.upstairs],
+                        p.walkup.rf = probDrf[, walking.upstairs],
+                        p.walkup.ada = probDada[, walking.upstairs],
+                        p.walkdown.svm = probDsvm[, walking.downstairs],
+                        p.walkdown.lda = probDlda[, walking.downstairs],
+                        p.walkdown.rf = probDrf[, walking.downstairs],
+                        p.walkdown.ada = probDada[, walking.downstairs])]
+
+test[binary == 0, `:=` (p.sit.svm = probSsvm[, sitting],
+                        p.sit.lda = probSlda[, sitting],
+                        p.sit.rf = probSrf[, sitting],
+                        p.sit.ada = probSada[, sitting],
+                        p.stand.svm = probSsvm[, standing],
+                        p.stand.lda = probSlda[, standing],
+                        p.stand.rf = probSrf[, standing],
+                        p.stand.ada = probSada[, standing],
+                        p.lay.svm = probSsvm[, lying],
+                        p.lay.lda = probSlda[, lying],
+                        p.lay.rf = probSrf[, lying],
+                        p.lay.ada = probSada[, lying],
+                        p.trans.svm = probSsvm[, postural.transition],
+                        p.trans.lda = probSlda[, postural.transition],
+                        p.trans.rf = probSrf[, postural.transition],
+                        p.trans.ada = probSada[, postural.transition])]
+```
+
+
+
+```{r}
+# Dynamic models' optimal parameter mean accuracy as weight vector
+WD <- c(max(ModelListD$svmLinear2$results$Accuracy),
+        max(ModelListD$lda$results$Accuracy),
+        max(ModelListD$rf$results$Accuracy),
+        max(ModelListD$AdaBoost.M1$results$Accuracy))
+
+# Static models' optimal parameter mean accuracy as weight vector
+WS <- c(max(ModelListS$svmLinear2$results$Accuracy),
+        max(ModelListS$lda$results$Accuracy),
+        max(ModelListS$rf$results$Accuracy),
+        max(ModelListS$AdaBoost.M1$results$Accuracy))
+```
+
+
+
+```{r}
+# Compute weighted probability sums for each class
+test[, `:=` (p.walk = sum(c(p.walk.svm, p.walk.lda, p.walk.rf,
+                            p.walk.ada) * WD),
+             p.walkup = sum(c(p.walkup.svm, p.walkup.lda, p.walkup.rf,
+                              p.walkup.ada) * WD),
+             p.walkdown = sum(c(p.walkdown.svm, p.walkdown.lda, p.walkdown.rf,
+                                p.walkdown.ada) * WD),
+             p.sit = sum(c(p.sit.svm, p.sit.lda, p.sit.rf, p.sit.ada) * WS),
+             p.stand = sum(c(p.stand.svm, p.stand.lda, p.stand.rf,
+                             p.stand.ada) * WS),
+             p.lay = sum(c(p.lay.svm, p.lay.lda, p.lay.rf, p.lay.ada) * WS),
+             p.trans = sum(c(p.trans.svm, p.trans.lda, p.trans.rf,
+                             p.trans.ada) * WS)), 
+     by = 1:nrow(test)
+     ]
+```
+
+
+```{r}
+# Determine final prediction by greatest weighted probability sum
+test[, prediction := which.max(c(p.walk,
+                                 p.walkup,
+                                 p.walkdown,
+                                 p.sit,
+                                 p.stand,
+                                 p.lay,
+                                 p.trans)),
+     by = 1:nrow(test)]
+```
+
+
+```{r}
+# Create multiclass prediction txt file
+write.table(test$prediction, file = "multiclass_1188.txt", quote = FALSE, row.names = FALSE, col.names = FALSE)
+```
+
+
+```{r}
+# Stop cluster
+stopCluster(cl)
+```
+
+
+```{r}
+# Unregister cluster
+unregister <- function() {
+  env <- foreach:::.foreachGlobals
+  rm(list=ls(name=env), pos=env)
+}
+
+unregister()
+```
+
